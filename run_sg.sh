@@ -102,7 +102,8 @@ for llm in "${rag_models[@]}"; do
 
     SY_MODEL_NAME=$syllm  
     PORT=$((11434 + ($SLURM_JOB_ID % 1000)))
-    OLLAMA_DIR="~/OLLAMA_DIR/ollama_$SLURM_JOB_ID"
+    #OLLAMA_DIR="~/OLLAMA_DIR/ollama_$SLURM_JOB_ID"
+    OLLAMA_DIR="${HOME}/OLLAMA_DIR/ollama_${SLURM_JOB_ID}"
 
     # Create isolated model/data directory
     mkdir -p "$OLLAMA_DIR"

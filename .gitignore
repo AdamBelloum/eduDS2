@@ -30,6 +30,7 @@ MANIFEST
 *.sif
 
 # ── Environment / secrets ─────────────────────────────────────────
+venv
 .env
 .env.*
 !.env.example
