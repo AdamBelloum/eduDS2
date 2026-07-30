@@ -1,16 +1,16 @@
-langchain
-langchain-experimental
-langchain-huggingface
-langchain-community
-langchain-ollama
-sentence-transformers
-transformers>=4.30.0
-torch>=2.0.0
-huggingface-hub
-chromadb>=0.4.0,<0.5.0
-pypdf
-rank_bm25
-accelerate
-ollama
-numpy==1.26
-streamlit
+# webapp/requirements.txt
+#
+# Dependencies for the Edu-Genius Streamlit web application.
+#
+# Install with:
+#   pip install -r webapp/requirements.txt
+#
+# This file extends the root requirements.txt with webapp-specific packages.
+# The pipeline core (RAG, retriever, etc.) is shared from src/ — no duplication.
+
+# ── Inherit all pipeline dependencies from the root ───────────────────────────
+-r ../requirements.txt
+
+# ── Web application (webapp-only) ─────────────────────────────────────────────
+streamlit>=1.35.0
+

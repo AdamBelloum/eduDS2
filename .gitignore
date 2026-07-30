@@ -52,3 +52,5 @@ Thumbs.db
 *.ckpt
 ollama_latest.sif
 
+webapp/vector_db_app/
+webapp/log/
