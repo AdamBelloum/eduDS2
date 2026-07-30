@@ -1,15 +1,34 @@
-langchain
+# requirements.txt (root)
+#
+# Core dependencies for the eduDS2 pipeline.
+# Used by both the CLI pipeline (src/main_ke.py, src/main_sg.py)
+# and the webapp (via webapp/requirements.txt).
+
+# ── LangChain core and integrations ───────────────────────────────────────────
+langchain>=0.1.0,<0.2.0
 langchain-experimental
 langchain-huggingface
 langchain-community
 langchain-ollama
+
+# ── Embeddings and transformers ───────────────────────────────────────────────
 sentence-transformers
 transformers>=4.30.0
 torch>=2.0.0
 huggingface-hub
+
+# ── Vector store and retrieval ────────────────────────────────────────────────
 chromadb>=0.4.0,<0.5.0
-pypdf
 rank_bm25
+
+# ── Document handling ─────────────────────────────────────────────────────────
+pypdf
+
+# ── Performance / hardware helpers ────────────────────────────────────────────
 accelerate
 ollama
-numpy==1.26pyyaml>=6.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+numpy>=1.26
+pyyaml>=6.0
+
