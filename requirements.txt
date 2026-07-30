@@ -12,4 +12,4 @@ pypdf
 rank_bm25
 accelerate
 ollama
-numpy==1.26
+numpy==1.26pyyaml>=6.0
