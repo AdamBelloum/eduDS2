@@ -1,118 +1,108 @@
-from langchain_ollama import ChatOllama
-import json
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import StrOutputParser
-from langchain_community.chat_message_histories import ChatMessageHistory
-from core.prompts import PromptTemplateManager
-from .utils import extract_json_from_llm
+"""
+rag.py — Enhanced RAG pipeline.
 
-class DataStorytellingEngine:
-    def __init__(self, model_name=None):
-        self.prompt_manager = PromptTemplateManager()
-        self.model = ChatOllama(
-            model=model_name,
-            temperature=0.7,
-            top_p=0.9,
-            max_new_tokens=4096,
+Combines HybridRetriever (BM25 + vector search) with an Ollama-served
+LLM to extract structured knowledge from educational documents.
+"""
+
+import logging
+
+from langchain_ollama import ChatOllama
+
+from core.prompts import PromptTemplateManager
+from core.processor import SmartDocumentProcessor
+from core.retriever import HybridRetriever
+from core.utils import contexts_extraction
+
+logger = logging.getLogger(__name__)
+
+
+class EnhancedRAG:
+    """
+    RAG pipeline that retrieves relevant document chunks and uses an
+    Ollama LLM to extract structured knowledge as JSON.
+
+    Args:
+        embedding_model_name: HuggingFace model name for vector embeddings.
+        model_name:           Ollama LLM model name, e.g. 'qwen2.5:7b'.
+        persist_dir:          Directory for ChromaDB persistence.
+        device:               Compute device — 'cuda', 'mps', or 'cpu'.
+                              Defaults to 'cpu' (safe for all machines).
+        docs_dir:             Path to the directory containing .md files.
+                              Defaults to docs/materials_md/parsed/.
+    """
+
+    def __init__(
+        self,
+        embedding_model_name: str | None = None,
+        model_name: str | None = None,
+        persist_dir: str | None = None,
+        device: str = "cpu",
+        docs_dir: str | None = None,
+    ) -> None:
+        logger.info(
+            "Initialising EnhancedRAG | model=%s | embeddings=%s | device=%s",
+            model_name, embedding_model_name, device,
         )
 
+        self.prompt_manager = PromptTemplateManager()
 
+        # Pass device and docs_dir through to the processor
+        processor = SmartDocumentProcessor(
+            embedding_model_name=embedding_model_name,
+            docs_dir=docs_dir,
+            device=device,
+        )
+        chunks = processor.process_documents()
+        logger.info("Document processor produced %d chunks.", len(chunks))
 
-    def generate_lesson_package(self, knowledge_base: dict) -> str:
+        self.retriever = HybridRetriever(
+            chunks,
+            embedding_model_name=embedding_model_name,
+            persist_dir=persist_dir,
+            device=device,
+        )
+
+        self.model = ChatOllama(
+            model=model_name,
+            temperature=0,
+            top_p=0.95,
+            max_new_tokens=2048,
+            format="json",
+        )
+        logger.info("EnhancedRAG ready.")
+
+    def ask(self, question: str) -> dict:
         """
-        Orchestrates the new multi-step pipeline to generate a full "lesson package"
-        containing an outline, story modules for each concept, and activities.
-        
+        Retrieve relevant context and generate a structured JSON answer.
+
         Args:
-            knowledge_base (dict): The structured knowledge from the RAG system.
+            question: The user's question string.
 
         Returns:
-            str: A complete, teacher-facing lesson package in a single Markdown string.
+            Parsed dict with keys: Question, Knowledge_Topic,
+            Core_Concepts, Overall_Summary, Source_Context.
         """
-        print("\n--- Starting Lesson Package Generation Pipeline ---")
-        
-        # for final markdown file list
-        final_document_parts = []
-        
-        # === STEP 1: Generate the Lesson Plan Outline ===
-        print("\n[PIPELINE STEP 1/3] Generating Lesson Plan Outline...")
-        try:
-            # Parameters for Prompt
-            concept_names = [concept.get('Concept', 'Unnamed Concept') for concept in knowledge_base.get('Core_Concepts', [])]
-            
-            outline_prompt = self.prompt_manager.get_prompt(
-                task="lesson_plan_outline",
-                question=knowledge_base.get('Question', 'N/A'),
-                knowledge_topic=knowledge_base.get('Knowledge_Topic', 'N/A'),
-                overall_summary=knowledge_base.get('Overall_Summary', 'N/A'),
-                concept_names_list=", ".join(concept_names)
-            )
-            
-            response = self.model.invoke(outline_prompt)
-            lesson_outline_md = response.content
-            
-            final_document_parts.append(lesson_outline_md)
-            print("✅ Lesson Plan Outline created successfully.")
+        logger.debug("Retrieving context for: %s", question)
+        contexts = self.retriever.retrieve(question)
 
-        except Exception as e:
-            print(f"❌ ERROR in Step 1 (Outline): {e}")
-            return "Error: Failed to create the lesson plan outline."
+        prompt = self.prompt_manager.get_prompt(
+            task="rag_extract",
+            question=question,
+            context="\n\n".join([
+                f"[Source: {doc.metadata['source']}, "
+                f"Type: {doc.metadata['content_type']}]\n{doc.page_content}"
+                for doc in contexts
+            ]),
+        )
 
-        # === STEP 2 & 3: Loop through each Core Concept to generate its Story and Activities ===
-        print(f"\n[PIPELINE STEP 2 & 3] Generating modules for {len(knowledge_base.get('Core_Concepts', []))} core concepts...")
-        
-        core_concepts = knowledge_base.get('Core_Concepts', [])
-        if not core_concepts:
-            print("⚠️  Warning: No core concepts found in the knowledge base.")
+        response = self.model.invoke(prompt)
+        answer_text = response.content
+        logger.debug("Raw LLM answer: %s", answer_text)
 
-        for i, concept in enumerate(core_concepts):
-            concept_name = concept.get('Concept', f'Concept {i+1}')
-            print(f"\n  -> Processing Concept: {concept_name}")
-            
-            # --- Sub-step 2: Generate Core Concept Story Module ---
-            try:
-                print(f"    - Generating story module...")
-                story_prompt = self.prompt_manager.get_prompt(
-                    task="core_concept_story",
-                    core_concept_json=json.dumps(concept, indent=2),
-                    concept_name=concept_name
-                )
-                response = self.model.invoke(story_prompt)
-                story_module_md = response.content
-                
-                # clear title
-                final_document_parts.append(f"\n\n---\n\n## Teaching Module: {concept_name}")
-                final_document_parts.append(story_module_md)
-                print(f"    ✅ Story module for '{concept_name}' created.")
+        parsed_data = self.prompt_manager.parse(answer_text)
+        logger.debug("Parsed data: %s", parsed_data)
 
-            except Exception as e:
-                print(f"❌ ERROR generating story for '{concept_name}': {e}")
-                final_document_parts.append(f"\n\n> *Error: Could not generate story module for {concept_name}.*")
-
-            # --- Sub-step 3: Generate Activity & Discussion Module ---
-            try:
-                print(f"    - Generating activity module...")
-                activity_prompt = self.prompt_manager.get_prompt(
-                    task="activity_discussion",
-                    concept_name=concept_name,
-                    strengths=concept.get('Strengths', 'N/A'),
-                    weaknesses=concept.get('Weaknesses', 'N/A')
-                )
-                response = self.model.invoke(activity_prompt)
-                activity_module_md = response.content
-                
-                final_document_parts.append(f"\n### Interactive Activities for {concept_name}")
-                final_document_parts.append(activity_module_md)
-                print(f"    ✅ Activity module for '{concept_name}' created.")
-                
-            except Exception as e:
-                print(f"❌ ERROR generating activities for '{concept_name}': {e}")
-                final_document_parts.append(f"\n\n> *Error: Could not generate activities for {concept_name}.*")
-        
-        print("\n--- Lesson Package Generation Finished ---")
-        
-        # combination of all parts
-        return "\n".join(final_document_parts)
-            
-    
+        parsed_data["Source_Context"] = contexts_extraction(contexts)
+        return parsed_data
 
