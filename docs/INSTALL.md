@@ -15,7 +15,7 @@ Your PDFs / notes  →  Knowledge Extraction  →  Story Generation  →  Lesson
 1. **Knowledge Extraction** — the AI reads your documents and extracts structured knowledge for each question you ask.
 2. **Story Generation** — the AI turns that knowledge into a complete, readable lesson with explanations, examples, and activities.
 
-> ⚠️ Both steps are computationally intensive. A GPU makes them 5–10× faster. See [INSTALL.md](docs/INSTALL.md) for hardware requirements.
+> ⚠️ Both steps are computationally intensive. A GPU makes them 5–10× faster. See [INSTALL.md](INSTALL.md) for hardware requirements.
 
 ---
 
@@ -122,7 +122,7 @@ After running Steps 5 and 6 you will find in `results/`:
 
 | File | Contents |
 |------|----------|
-| [INSTALL.md](docs/INSTALL.md) | Full installation guide — local and HPC |
+| [INSTALL.md](INSTALL.md) | Full installation guide — local and HPC |
 | [docs/WEBAPP.md](docs/WEBAPP.md) | Web interface user guide |
 | [DEVELOPER.md](DEVELOPER.md) | Architecture, scripts, modules, tests |
 
@@ -132,12 +132,3 @@ After running Steps 5 and 6 you will find in `results/`:
 
 MIT
 
-## Citation
-
-If you use Edu-Genius in your work, please cite:
-
-**Paper**
-> Junming Ye  et al. (2026). *Affordable AI for the Classroom: Small Language Models Can Support Effective Data Storytelling*. DOI: [10.14293/FFL26.000014.v1](https://doi.org/10.14293/FFL26.000014.v1)
-
-**MSc Thesis**
-> Junming Ye (2026). *Investigating the Application of Small Language Models for Educational Data Storytelling*. [Linl](https://staff.fnwi.uva.nl/a.s.z.belloum/MSctheses/MScthesis_JunmingYe.pdf) 
