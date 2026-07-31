@@ -5,6 +5,49 @@ plan and teaching activities. You don’t need to write code or edit scripts.
 
 ---
 
+There's a persistent session issue blocking artifact creation. Here's the content directly — you can copy it into a `docs/USER_GUIDE.md` file:
+
+---
+
+## What happens under the hood?
+
+### Stage 1 — Knowledge Extraction (KE) ⏱ slow · GPU recommended
+The AI reads through all your Markdown documents and answers each of your questions by retrieving the most relevant passages. This is the most computationally intensive step.
+
+- **What it does:** For each question in your query file, the AI searches your documents and extracts the key knowledge needed to answer it.
+- **Output:** Structured JSON files saved in `results/`.
+- **Time:** A few minutes per question on GPU; significantly longer on CPU.
+- **GPU impact:** A GPU can make this 5–10× faster.
+
+### Stage 2 — Story & Lesson Generation (SG) ⏱ moderate · GPU recommended
+The AI takes the extracted knowledge and turns it into a complete, readable lesson with explanations, examples, and a narrative structure.
+
+- **Output:** Lesson files saved in `results/`, viewable in the web app.
+- **GPU impact:** Speeds up text generation noticeably for longer lessons.
+
+---
+
+## Step-by-step overview
+
+| Step | What you do | Time | GPU needed? |
+|------|-------------|------|-------------|
+| 1. Manage Ollama | Start the local AI server | Seconds | No |
+| 2. Convert PDFs | Convert lecture PDFs to Markdown (optional) | 1–5 min per PDF | No |
+| 3. Knowledge Extraction | AI reads documents and extracts knowledge | ⏱ Minutes–hours | ✅ Strongly recommended |
+| 4. Story Generation | AI writes the lesson from extracted knowledge | ⏱ Minutes | ✅ Recommended |
+| 5. Web Application | Browse and read your generated lessons | Instant | No |
+
+---
+
+## Tips
+
+- **Steps 1 & 2** are quick setup tasks — no GPU needed.
+- **Steps 3 & 4** are the heavy AI work. Use an HPC cluster with a GPU if available.
+- On a **local laptop**, Step 3 can take a while depending on document and question count. Running overnight is fine.
+- On **HPC**, Steps 3 & 4 run as background jobs — you can close your terminal and check back later via Step 6 (SLURM job status).
+- You only need to redo **Step 3** if you change documents or questions. To regenerate the lesson style only, re-run **Step 4**.
+
+
 ## What you need
 
 On your own computer (laptop or desktop):
