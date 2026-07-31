@@ -21,7 +21,7 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 import streamlit as st
 
-from core.config import load_config
+from config import load_config
 from core.utils_hardware import setup_hardware, log_hardware_summary
 from core.rag import EnhancedRAG
 from core.DataStorytellingEngine import DataStorytellingEngine
