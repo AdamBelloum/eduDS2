@@ -22,7 +22,7 @@ DEFAULT_MODEL="llama3.1:8b"
 MODEL_NAME="${1:-$DEFAULT_MODEL}"
 OLLAMA_PORT="${OLLAMA_PORT:-11434}"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:${OLLAMA_PORT}}"
-VENV_PATH="${VENV_PATH:-${HOME}/.venv}"
+VENV_PATH="${VENV_PATH:-${PWD}/venv}"
 
 # Repo root = two levels up from this script (Scripts/ → repo root)
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -82,7 +82,8 @@ fi
 
 # ── Model preparation ──────────────────────────────────────────────────────────
 echo "[INFO] Ensuring model '${MODEL_NAME}' is available..."
-ollama pull "${MODEL_NAME}"
+#ollama pull "${MODEL_NAME}"
+sed -i '' 's/^ollama pull "\${MODEL_NAME}"/docker exec ollama-server ollama pull "${MODEL_NAME}"/' scripts/run_ke_local.sh
 
 # ── Run Knowledge Extraction ───────────────────────────────────────────────────
 echo "[INFO] Starting Knowledge Extraction..."

@@ -1,163 +1,101 @@
 """
-main_ke.py — Knowledge Extraction entry point.
+retriever.py — Hybrid BM25 + vector retriever with cross-encoder reranking.
 
-Runs the RAG pipeline over all query JSON files found in <ROOT_DIR>/docs/query/
-and writes structured knowledge JSON to <ROOT_DIR>/results/<model>/knowledge_extraction/.
-
-Supports: HPC (SLURM + GPU), desktop with GPU, desktop CPU-only (macOS Intel/ARM).
-Hardware is detected automatically unless overridden in config.yaml.
+The device for embeddings and the reranker is passed in explicitly so
+this module works on CPU (macOS Intel), MPS (Apple Silicon), and CUDA (GPU).
 """
 
-import json
 import logging
-import shutil
-import argparse
-from glob import glob
-from pathlib import Path
 
-from core.config import load_config
-from core.utils_hardware import setup_hardware, log_hardware_summary
-from core.rag import EnhancedRAG
-from core.utils import reconstruct_specific_json
+import torch
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain_community.retrievers import BM25Retriever
+from langchain.retrievers import EnsembleRetriever
+from sentence_transformers import CrossEncoder
 
+logger = logging.getLogger(__name__)
 
-def _setup_logging(level: str, log_file: Path | None) -> None:
-    """Configure root logger with console + optional file handler."""
-    handlers = [logging.StreamHandler()]
-    if log_file:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(log_file))
-
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=handlers,
-    )
+_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 
 
-def main(rag_model: str | None, embedding_model: str | None) -> None:
+class HybridRetriever:
     """
-    Run knowledge extraction for all query files.
+    Two-stage retriever:
+      1. Ensemble of BM25 + ChromaDB vector search (recall stage).
+      2. Cross-encoder reranker (precision stage).
 
     Args:
-        rag_model:       Ollama LLM model name (overrides config if provided).
-        embedding_model: HuggingFace embedding model name (overrides config if provided).
+        chunks:               List of LangChain Document objects.
+        embedding_model_name: HuggingFace model name for vector embeddings.
+        persist_dir:          ChromaDB persistence directory.
+        device:               Compute device — 'cuda', 'mps', or 'cpu'.
+                              Defaults to auto-detection via torch.
     """
-    # ── Load config ───────────────────────────────────────────────────────────
-    cfg = load_config()
 
-    # ── Logging ───────────────────────────────────────────────────────────────
-    _setup_logging(cfg.logging.level, cfg.logging.log_file)
-    logger = logging.getLogger(__name__)
+    def __init__(
+        self,
+        chunks: list,
+        embedding_model_name: str | None = None,
+        persist_dir: str = "../../vector_db",
+        device: str | None = None,
+    ) -> None:
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # ── Hardware detection ────────────────────────────────────────────────────
-    hw = setup_hardware(
-        requested_device=cfg.hardware.device,
-        num_cpu_threads=cfg.hardware.num_cpu_threads,
-        cuda_device_index=cfg.hardware.cuda_device_index,
-    )
-    log_hardware_summary(hw)
+        logger.info(
+            "Initialising HybridRetriever | embeddings=%s | device=%s | chunks=%d",
+            embedding_model_name, device, len(chunks),
+        )
 
-    # ── Resolve models (CLI args override config) ─────────────────────────────
-    resolved_rag_model = rag_model or cfg.models.default_rag_model
-    resolved_emb_model = embedding_model or cfg.models.embedding_model
+        self.vector_db = Chroma.from_documents(
+            chunks,
+            embedding=HuggingFaceEmbeddings(
+                model_name=embedding_model_name,
+                model_kwargs={
+                    "device": device,
+                    "trust_remote_code": True,
+                },
+                encode_kwargs={"batch_size": 16},
+            ),
+            persist_directory=persist_dir,
+        )
+        logger.info("ChromaDB vector store built.")
 
-    logger.info("RAG model       : %s", resolved_rag_model)
-    logger.info("Embedding model : %s", resolved_emb_model)
-    logger.info("ROOT_DIR        : %s", cfg.paths.root_dir)
+        self.bm25_retriever = BM25Retriever.from_documents(chunks, k=16)
+        logger.info("BM25 retriever built.")
 
-    # ── Build directory paths ─────────────────────────────────────────────────
-    output_dir_ke = (
-        cfg.paths.results_dir
-        / resolved_rag_model.replace("/", "_").replace(":", "_")
-        / "knowledge_extraction"
-    )
-    persist_dir = (
-        cfg.paths.vector_db_dir
-        / resolved_emb_model.replace("/", "_").replace(":", "_")
-    )
+        self.ensemble_retriever = EnsembleRetriever(
+            retrievers=[
+                self.vector_db.as_retriever(search_kwargs={"k": 8}),
+                self.bm25_retriever,
+            ],
+            weights=[0.6, 0.4],
+        )
 
-    if output_dir_ke.exists():
-        shutil.rmtree(output_dir_ke)
-    output_dir_ke.mkdir(parents=True)
+        logger.info("Loading reranker: %s on %s ...", _RERANKER_MODEL, device)
+        self.reranker = CrossEncoder(_RERANKER_MODEL, device=device)
+        logger.info("HybridRetriever ready.")
 
-    if persist_dir.exists():
-        shutil.rmtree(persist_dir)
+    def retrieve(self, query: str, top_k: int = 5) -> list:
+        """
+        Retrieve and rerank the most relevant document chunks.
 
-    # ── Initialise RAG ────────────────────────────────────────────────────────
-    logger.info("Initialising RAG pipeline...")
-    rag = EnhancedRAG(
-        embedding_model_name=resolved_emb_model,
-        model_name=resolved_rag_model,
-        persist_dir=str(persist_dir),
-    )
+        Args:
+            query: The search query string.
+            top_k: Number of top documents to return after reranking.
 
-    # ── Process query files ───────────────────────────────────────────────────
-    query_files = sorted(glob(str(cfg.paths.query_dir / "query*.json")))
-    if not query_files:
-        logger.warning("No query files found in %s", cfg.paths.query_dir)
-        return
+        Returns:
+            List of LangChain Document objects, ranked by relevance.
+        """
+        logger.debug("Retrieving for query: %s", query)
+        docs = self.ensemble_retriever.get_relevant_documents(query)
+        logger.debug("Ensemble retrieved %d docs, reranking to top %d.", len(docs), top_k)
 
-    for qfile in query_files:
-        qfile = Path(qfile)
-        logger.info("Processing: %s", qfile.name)
+        pairs = [[query, doc.page_content] for doc in docs]
+        scores = self.reranker.predict(pairs)
+        ranked_docs = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
 
-        with open(qfile, "r", encoding="utf-8") as f:
-            queries_data = json.load(f)
-
-        output_subdir_ke = output_dir_ke / qfile.stem
-        if output_subdir_ke.exists():
-            shutil.rmtree(output_subdir_ke)
-        output_subdir_ke.mkdir(parents=True)
-
-        for idx, item in enumerate(queries_data):
-            query = item.get("Question", "")
-            logger.info("  Q%d: %s", idx + 1, query)
-
-            answer_json = None  # explicit init — prevents UnboundLocalError
-
-            try:
-                parsed_data = rag.ask(query)
-                _, final_json = reconstruct_specific_json(parsed_data)
-                logger.debug("  Raw JSON: %s", final_json)
-                answer_json = json.loads(final_json)
-            except json.JSONDecodeError as e:
-                logger.error("  JSON parse error for Q%d: %s", idx + 1, e)
-            except Exception as e:
-                logger.error("  Unexpected error for Q%d: %s", idx + 1, e)
-
-            if answer_json is None:
-                logger.warning("  Skipping Q%d — no valid output produced.", idx + 1)
-                continue
-
-            output_file = output_subdir_ke / f"q{idx + 1:02d}.json"
-            with open(output_file, "w", encoding="utf-8") as f_out:
-                json.dump(answer_json, f_out, indent=2, ensure_ascii=False)
-            logger.info("  Saved: %s", output_file)
-
-        logger.info("Finished: %s -> %s", qfile.name, output_subdir_ke)
-
-    logger.info("All knowledge extraction tasks complete.")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run knowledge extraction. Values from config.yaml are used "
-                    "unless overridden by CLI arguments."
-    )
-    parser.add_argument(
-        "--rag_model",
-        type=str,
-        default=None,
-        help="Ollama LLM model name, e.g. 'qwen2.5:7b'. Overrides config.yaml.",
-    )
-    parser.add_argument(
-        "--embedding_model",
-        type=str,
-        default=None,
-        help="HuggingFace embedding model name. Overrides config.yaml.",
-    )
-    args = parser.parse_args()
-    main(args.rag_model, args.embedding_model)
-
+        top_docs = [doc for doc, _ in ranked_docs[:top_k]]
+        logger.debug("Reranking complete, returning %d docs.", len(top_docs))
+        return top_docs

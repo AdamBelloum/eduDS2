@@ -13,6 +13,15 @@
 echo "Starting job on $(hostname) at $(date)"
 mkdir -p log # Ensure log directory exists
 
+#-------------------------------------------------------
+
+export PYTHONPATH="$PWD/src"
+streamlit run webapp/app.py \
+  --server.port ${STREAMLIT_PORT} \
+  --server.headless true \
+  --server.address 0.0.0.0 \
+  --server.enableCORS false
+
 # --- 1. Load required modules & Activate Environment ---
 module load 2023
 module load Python/3.11.3-GCCcore-12.3.0
@@ -99,7 +108,7 @@ echo ""
 
 # --- 6. Run the Streamlit Application ---
 # The script will now wait here until Streamlit is closed or the job is cancelled.
-streamlit run ./apptest/src/app.py \
+streamlit run ./webapp/app.py \
   --server.port ${STREAMLIT_PORT} \
   --server.headless true \
   --server.address 0.0.0.0 \

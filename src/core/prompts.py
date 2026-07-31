@@ -1,5 +1,6 @@
 # class PromptTemplateManager:
 from langchain.output_parsers import StructuredOutputParser, ResponseSchema
+
 import ast
 
 class PromptTemplateManager:
