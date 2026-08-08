@@ -15,7 +15,7 @@ Your PDFs / notes  →  Knowledge Extraction  →  Story Generation  →  Lesson
 1. **Knowledge Extraction** — the AI reads your documents and extracts structured knowledge for each question you ask.
 2. **Story Generation** — the AI turns that knowledge into a complete, readable lesson with explanations, examples, and activities.
 
-> ⚠️ Both steps are computationally intensive. A GPU makes them 5–10× faster. See [INSTALL.md](docs/INSTALL.md) for hardware requirements.
+>  Both steps are computationally intensive. A GPU makes them 5–10× faster. See [INSTALL.md](docs/INSTALL.md) for hardware requirements.
 
 ---
 
@@ -62,8 +62,8 @@ The menu checks your setup, starts the AI server, and walks you through every st
 | 2 — Build MinerU | Builds the PDF converter (once only) | 2–5 min | No |
 | 3 — Build eduDS | Builds the main app (once only) | 2–5 min | No |
 | 4 — Convert PDFs | Converts your lecture PDFs to Markdown | 1–5 min/PDF | No |
-| 5 — Knowledge Extraction | AI reads documents and extracts knowledge | ⏱ Minutes–hours | ✅ Recommended |
-| 6 — Story Generation | AI writes the lesson plan | ⏱ Minutes | ✅ Recommended |
+| 5 — Knowledge Extraction | AI reads documents and extracts knowledge | ⏱ Minutes–hours |  Recommended |
+| 6 — Story Generation | AI writes the lesson plan | ⏱ Minutes |  Recommended |
 
 Steps 2 and 3 only need to run once. Steps 5 and 6 can be re-run any time with new documents or questions.
 
@@ -140,4 +140,4 @@ If you use Edu-Genius in your work, please cite:
 > Junming Ye  et al. (2026). *Affordable AI for the Classroom: Small Language Models Can Support Effective Data Storytelling*. DOI: [10.14293/FFL26.000014.v1](https://doi.org/10.14293/FFL26.000014.v1)
 
 **MSc Thesis**
-> Junming Ye (2026). *Investigating the Application of Small Language Models for Educational Data Storytelling*. [Linl](https://staff.fnwi.uva.nl/a.s.z.belloum/MSctheses/MScthesis_JunmingYe.pdf) 
+> Junming Ye (2025). [*Investigating the Application of Small Language Models for Educational Data Storytelling*](https://staff.fnwi.uva.nl/a.s.z.belloum/MSctheses/MScthesis_JunmingYe.pdf) 
